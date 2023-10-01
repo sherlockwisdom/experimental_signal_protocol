@@ -26,15 +26,31 @@ class Person:
         self.state.ratchet_ck()
         mk = self.state.mk
         AD = b"AD"
-        message = libsig.ENCRYPT(mk, text.encode(), AD)
-        print("\t", self.name, ": send:", message)
+        cipher_text, MAC = libsig.ENCRYPT(mk, text.encode(), AD)
+        print("\t", self.name, ": send:", cipher_text)
+        print("\t", self.name, ": mac:", MAC)
         print()
 
-        return message
+        return cipher_text, MAC
 
-    def ratched_decrypt(self, cipher_text):
+    def ratched_decrypt(self, cipher_text, MAC):
         self.state.ratchet_ck()
         mk = self.state.mk
+        AD = b"AD"
+
+        try:
+            libsig._verify_cipher_text(mk, cipher_text, MAC, AD)
+        except ValueError as error:
+            print("!!(KERNEL PANIC) - failed to verify cipher text")
+            raise error
+        except Exception as error:
+            raise error
+        else:
+            text = libsig.DECRYPT(mk, cipher_text)
+            print("\t", self.name, ": received:", text)
+            print()
+
+            return text
 
     class State:
         rk = None
@@ -52,15 +68,19 @@ class Person:
             self.rk_iter += 1
             print(self.name, ": state changed - rk")
             print("\t+ rk_iter:", self.rk_iter)
+            print("\t+ ck_iter:", self.ck_iter)
             print("\t+ rk:", self.rk)
             print("\t+ ck:", self.ck)
             print()
 
         def ratchet_ck(self):
-            ck, mk = libsig.KDF_CK(
+            self.ck, self.mk = libsig.KDF_CK(
                     self.ck, bytes(self.ck_const), bytes(self.mk_const))
+
+            """
             self.ck = ck.encode()
             self.mk = mk.encode()
+            """
 
             self.ck_iter += 1
             self.ck_const += 1

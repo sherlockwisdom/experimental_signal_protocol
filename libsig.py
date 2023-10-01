@@ -18,28 +18,42 @@ def KDF_RK(rk, dh_out):
 
 def KDF_CK(ck, ck_const, mk_const):
     d_ck = HMAC.new(ck, digestmod=SHA256)
-    ck = d_ck.update(ck_const).hexdigest()
-    mk = d_ck.update(mk_const).hexdigest()
+
+    ck = d_ck.update(ck_const).digest()
+    mk = d_ck.update(mk_const).digest()
 
     return ck, mk
 
 def ENCRYPT(mk, plaintext, associated_data) -> bytes:
+    key, auth_key, iv = _encrypt_params(mk)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    cipher_text = iv + cipher.encrypt(pad(plaintext,  AES.block_size))
+
+    hmac = _build_hash_out(auth_key, associated_data, cipher_text)
+    return cipher_text, cipher_text + hmac.digest()
+
+def DECRYPT(mk, cipher_text):
+    key, _, _ = _encrypt_params(mk)
+    iv = cipher_text[:AES.block_size]
+    data = cipher_text[AES.block_size:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(data), AES.block_size)
+
+def _build_hash_out(auth_key, associated_data, cipher_text):
+    return HMAC.new(auth_key, digestmod=SHA256).update(
+            associated_data + cipher_text)
+
+def _encrypt_params(mk):
     hash_len = 80
     information = b'ENCRYPT'
     salt = bytes(hash_len)
     hkdf_out = _hkdf(mk, salt, hash_len, 1, information)
-    enc_key = hkdf_out[:32]
+
+    key = hkdf_out[:32]
     auth_key = hkdf_out[32:64]
     iv = hkdf_out[64:hash_len]
 
-    # vector = get_random_bytes(AES.block_size)
-    cipher = AES.new(enc_key, AES.MODE_CBC, iv)
-    cipher_text = iv + cipher.encrypt(pad(plaintext,  AES.block_size))
-
-    hash_in = associated_data + cipher_text
-    hash_out = HMAC.new(hash_in, digestmod=SHA256).hexdigest()
-    
-    return cipher_text + hash_out.encode()
+    return key, auth_key, iv
 
 
 def _hkdf(master_secret, salt=None, length=32, num_keys=2, information=None):
@@ -48,12 +62,13 @@ def _hkdf(master_secret, salt=None, length=32, num_keys=2, information=None):
     
     return HKDF(master_secret, length, salt, SHA512, num_keys, context=information)
 
-
-def decrypt(key: bytes, data: bytes) -> bytes:
-    iv = data[:16]
-    data = data[16:]
-
-    decryption_cipher = AES.new(key, AES.MODE_CBC, iv)
-
-    return unpad(decryption_cipher.decrypt(data), AES.block_size)
-
+def _verify_cipher_text(mk, cipher_text, MAC, associated_data):
+    """
+    Throws ValueError – if the MAC does not match. 
+    It means that the message has been tampered with or that 
+        the MAC key is incorrect.
+    """ 
+    _, auth_key, _ = _encrypt_params(mk)
+    hmac = _build_hash_out(auth_key, associated_data, cipher_text)
+    mac = MAC[len(cipher_text):]
+    hmac.verify(mac)

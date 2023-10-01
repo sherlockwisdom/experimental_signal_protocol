@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     alice_msg = "hello world"
 
-    enc_alice_message = Alice.ratched_encrypt(alice_msg)
-    dec_alice_message = Bob.ratched_decrypt(enc_alice_message)
+    enc_alice_message, MAC = Alice.ratched_encrypt(alice_msg)
+    dec_alice_message = Bob.ratched_decrypt(enc_alice_message, MAC)
 
     assert(dec_alice_message.decode("utf-8") == alice_msg)
