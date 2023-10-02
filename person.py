@@ -11,8 +11,8 @@ class Person:
         self.logging.basicConfig(level=log_level)
         self.state.logging = self.logging
 
-    def init(self, SK, dh_pub_key=None):
-        if SK == self.state.RK:
+    def init(self, SK=None, dh_pub_key=None):
+        if not SK:
             self.state.ratchet_init_third(dh_pub_key)
         elif not dh_pub_key:
             self.state.ratchet_init(SK)
@@ -76,6 +76,8 @@ class Person:
             self.RK, self.CKr = libsig.KDF_RK(self.RK, libsig.DH(self.DHs, self.DHr))
             self.logging.debug("%s: Initializing third ratchet (RK): %s", 
                                self.name, self.RK)
+            self.DHs = libsig.GENERATE_DH()
+            self.ratchet_init_second(self.RK, self.DHr)
 
         def report_status(self):
             self.logging.debug("%s: State parameters -", self.name)
@@ -85,7 +87,7 @@ class Person:
             self.logging.debug("\t+ Nr: %d", self.Nr)
             self.logging.debug("\t+ RK: %s", self.RK)
             self.logging.debug("\t+ CKs: %s", self.CKs)
-            self.logging.debug("\t+ Ckr: %s\n", self.CKr)
+            self.logging.debug("\t+ Ckr: %s", self.CKr)
 
         def __init__(self, name):
             self.name = name
