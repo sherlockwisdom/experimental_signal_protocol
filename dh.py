@@ -3,36 +3,23 @@
 from ecdsa import ECDH, NIST256p
 
 class C_ECDH:
-    def __init__(self, ini_public_key=None):
+    def __init__(self):
         """
         """
         self.ecdh = ECDH(curve=NIST256p)
-
-        if ini_public_key:
-            self.ecdh.load_received_public_key_pem(ini_public_key)
-
         self.ecdh.generate_private_key()
 
-    def get_public_key(self):
-        """
-        """
-        return self.ecdh.get_public_key().to_pem()
+    def set_peer_public_key(self, public_key):
+        self.ecdh.load_received_public_key_pem(public_key)
+
+    def get_public_key(self, pem=True):
+        public_key = self.ecdh.get_public_key()
+        return public_key.to_pem() if pem else public_key
 
 
-    def generate_secret(self, agree_public_key=None):
-        """
-        """
-
-        """
-        with open("remote_public_key.pem") as e:
-            remote_public_key = e.read()
-        """
-        if agree_public_key:
-            self.ecdh.load_received_public_key_pem(agree_public_key)
+    def generate_secret(self):
         self.b_secrets = self.ecdh.generate_sharedsecret_bytes()
-
         return self.b_secrets
-
 
 
 

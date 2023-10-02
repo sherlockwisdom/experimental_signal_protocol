@@ -1,95 +1,92 @@
 #!/usr/bin/env python3
 
 import libsig
+import logging
 
 class Person:
-    def __init__(self, name, ini_public_key=None):
+    def __init__(self, name, log_level='DEBUG'):
         self.name = name
-        self.dh = libsig.GENERATE_DH(ini_public_key)
+        self.state = self.State(self.name)
+        self.logging = logging
+        self.logging.basicConfig(level=log_level)
+        self.state.logging = self.logging
 
-        if ini_public_key:
-            self.dh_out = self.get_public_key()
-            self.init(dh_out = self.dh_out)
+    def init(self, SK, dh_pub_key=None):
+        if SK == self.state.RK:
+            self.state.ratchet_init_third(dh_pub_key)
+        elif not dh_pub_key:
+            self.state.ratchet_init(SK)
+        else:
+            self.state.ratchet_init_second(SK, dh_pub_key)
+        self.state.report_status()
+        return self.state.DHs.get_public_key()
 
-    def get_public_key(self):
-        return self.dh.get_public_key()
+    def send_message(self, plaintext, AD):
+        self.state.CKs, mk = libsig.KDF_CK(self.state.CKs)
+        self.state.Ns += 1
+        '''TODO
+        return libsig.ENCRYPT(mk, plaintext, libsig.CONCAT(AD, header))
+        '''
+        self.state.report_status()
+        return libsig.ENCRYPT(mk, plaintext.encode(), AD.encode())
 
-    def init(self, ini_public_key=None, dh_out=None):
-        self.dh.generate_secret(ini_public_key)
-        print(self.name, ": generated secret")
-
-        if ini_public_key:
-            self.dh_out = ini_public_key
-        self.state = self.State(self.name, self.dh.b_secrets, self.dh_out)
-
-    def ratched_encrypt(self, text):
-        self.state.ratchet_ck()
-        mk = self.state.mk
-        AD = b"AD"
-        cipher_text, MAC = libsig.ENCRYPT(mk, text.encode(), AD)
-        print("\t", self.name, ": send:", cipher_text)
-        print("\t", self.name, ": mac:", MAC)
-        print()
-
-        return cipher_text, MAC
-
-    def ratched_decrypt(self, cipher_text, MAC):
-        self.state.ratchet_ck()
-        mk = self.state.mk
-        AD = b"AD"
-
+    def read_message(self, cipher_text, MAC, AD):
+        self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
+        self.state.Nr += 1
         try:
-            libsig._verify_cipher_text(mk, cipher_text, MAC, AD)
+            '''TODO
+            return libsig.DECRYPT(mk, cipher_text, CONCAT(AD, header))
+            '''
+            plaintext = libsig.DECRYPT(mk, cipher_text, AD.encode(), MAC)
+            self.state.report_status()
+            return plaintext
         except ValueError as error:
-            print("!!(KERNEL PANIC) - failed to verify cipher text")
+            logging.error("%s: !!(KERNEL PANIC) - failed to verify cipher text", 
+                          self.name)
             raise error
         except Exception as error:
             raise error
-        else:
-            text = libsig.DECRYPT(mk, cipher_text)
-            print("\t", self.name, ": received:", text)
-            print()
-
-            return text
 
     class State:
-        rk = None
-        ck = None
-        mk = None
-        rk_iter = 0
-        ck_iter = 0
+        DHs = None
+        DHr = None
 
-        ck_const = 0
-        mk_const = ck_const + 1
-        def __init__(self, name, rk, dh_out):
-            self.name =name
+        RK = None
+        CKs = None
+        CKr = None
 
-            self.rk, self.ck = libsig.KDF_RK(rk, dh_out)
-            self.rk_iter += 1
-            print(self.name, ": state changed - rk")
-            print("\t+ rk_iter:", self.rk_iter)
-            print("\t+ ck_iter:", self.ck_iter)
-            print("\t+ rk:", self.rk)
-            print("\t+ ck:", self.ck)
-            print()
+        Ns = 0
+        Nr = 0
 
-        def ratchet_ck(self):
-            self.ck, self.mk = libsig.KDF_CK(
-                    self.ck, bytes(self.ck_const), bytes(self.mk_const))
+        logging = None
 
-            """
-            self.ck = ck.encode()
-            self.mk = mk.encode()
-            """
+        def ratchet_init(self, SK):
+            self.RK = SK
+            self.logging.debug("%s: Initializing first ratchet (SK): %s", 
+                               self.name, self.RK)
 
-            self.ck_iter += 1
-            self.ck_const += 1
-            self.mk_const = self.ck_const + 1
+        def ratchet_init_second(self, SK, dh_pub_key):
+            self.DHr = dh_pub_key
+            self.RK, self.CKs = libsig.KDF_RK(SK, libsig.DH(self.DHs, self.DHr))
+            self.logging.debug("%s: Initializing second ratchet (SK): %s", 
+                               self.name, self.RK)
 
-            print(self.name, ": state changed - ck")
-            print("\t+ ck_iter:", self.ck_iter)
-            print("\t+ ck_const:", self.ck_const)
-            print("\t+ mk_const:", self.mk_const)
-            print("\t+ ck:", self.ck)
-            print("\t+ mk:", self.mk)
-            print()
+        def ratchet_init_third(self, dh_pub_key):
+            self.DHr = dh_pub_key
+            self.RK, self.CKr = libsig.KDF_RK(self.RK, libsig.DH(self.DHs, self.DHr))
+            self.logging.debug("%s: Initializing third ratchet (RK): %s", 
+                               self.name, self.RK)
+
+        def report_status(self):
+            self.logging.debug("%s: State parameters -", self.name)
+            self.logging.debug("\t+ DHs: %s", self.DHs.get_public_key(False))
+            self.logging.debug("\t+ DHr: %s", self.DHr)
+            self.logging.debug("\t+ Ns: %d", self.Ns)
+            self.logging.debug("\t+ Nr: %d", self.Nr)
+            self.logging.debug("\t+ RK: %s", self.RK)
+            self.logging.debug("\t+ CKs: %s", self.CKs)
+            self.logging.debug("\t+ Ckr: %s\n", self.CKr)
+
+        def __init__(self, name):
+            self.name = name
+            self.DHs = libsig.GENERATE_DH()

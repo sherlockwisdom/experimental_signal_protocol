@@ -6,22 +6,23 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
+def GENERATE_DH():
+    return dh.C_ECDH()
 
-def GENERATE_DH(ini_public_key=None):
-    return dh.C_ECDH(ini_public_key)
+def DH(dh_pair, dh_pub):
+    dh_pair.set_peer_public_key(dh_pub)
+    return dh_pair.generate_secret()
 
-def KDF_RK(rk, dh_out):
+def KDF_RK(rk, dh_out): #dh_out = pub_key
     length=32
     num_keys=2
     information=b'KDF_RK'
     return _hkdf(dh_out, rk, length, num_keys, information)
 
-def KDF_CK(ck, ck_const, mk_const):
+def KDF_CK(ck):
     d_ck = HMAC.new(ck, digestmod=SHA256)
-
-    ck = d_ck.update(ck_const).digest()
-    mk = d_ck.update(mk_const).digest()
-
+    ck = d_ck.update(bytes(0x01)).digest()
+    mk = d_ck.update(bytes(0x02)).digest()
     return ck, mk
 
 def ENCRYPT(mk, plaintext, associated_data) -> bytes:
@@ -32,12 +33,17 @@ def ENCRYPT(mk, plaintext, associated_data) -> bytes:
     hmac = _build_hash_out(auth_key, associated_data, cipher_text)
     return cipher_text, cipher_text + hmac.digest()
 
-def DECRYPT(mk, cipher_text):
-    key, _, _ = _encrypt_params(mk)
-    iv = cipher_text[:AES.block_size]
-    data = cipher_text[AES.block_size:]
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    return unpad(cipher.decrypt(data), AES.block_size)
+def DECRYPT(mk, cipher_text, associated_data, MAC):
+    try:
+        _verify_cipher_text(mk, cipher_text, MAC, associated_data)
+    except Exception as error:
+        raise error
+    else:
+        key, _, _ = _encrypt_params(mk)
+        iv = cipher_text[:AES.block_size]
+        data = cipher_text[AES.block_size:]
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        return unpad(cipher.decrypt(data), AES.block_size)
 
 def _build_hash_out(auth_key, associated_data, cipher_text):
     return HMAC.new(auth_key, digestmod=SHA256).update(
