@@ -6,6 +6,73 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
+class State:
+    DHs:dh.C_ECDH = None # -> keypair
+    DHr:str = None # -> public key
+
+    RK = None
+    CKs = None
+    CKr = None
+
+    Ns = 0
+    Nr = 0
+
+    PN = 0
+
+    logging = None
+
+    def report_status(self):
+        self.logging.debug("%s: State parameters -", self.name)
+        self.logging.debug("\t+ DHs: %s", self.DHs.get_public_key(False))
+        self.logging.debug("\t+ DHr: %s", self.DHr)
+        self.logging.debug("\t+ PN: %s", self.PN)
+        self.logging.debug("\t+ Ns: %d", self.Ns)
+        self.logging.debug("\t+ Nr: %d", self.Nr)
+        self.logging.debug("\t+ RK: %s", self.RK)
+        self.logging.debug("\t+ CKs: %s", self.CKs)
+        self.logging.debug("\t+ Ckr: %s", self.CKr)
+
+    def __init__(self, name):
+        self.name = name
+
+class HEADER:
+    DH = None
+    PN = None
+    N = None
+    
+    LEN = None
+    
+    def __init__(self, DH, PN, N):
+        self.DH = DH
+        self.PN = PN
+        self.N = N
+
+    def compose(data):
+        import json
+        r_header = json.loads(data)
+        return HEADER(r_header[0], r_header[1], r_header[2])
+
+class DHRatchet:
+    def __init__(self, state: State, header: HEADER):
+        state.PN = state.Ns
+        state.Ns = 0
+        state.Nr = 0
+        state.DHr = header.DH
+        state.RK, State.CKr = KDF_RK(state.RK, DH(state.DHs, state.DHr))
+        state.DHs = GENERATE_DH()
+        state.RK, state.CKs = KDF_RK(state.RK, DH(state.DHs, state.DHr))
+        return state
+
+    def init(state, SK, dh_pub_key):
+        state.DHs = GENERATE_DH()
+        state.RK = SK
+        state.DHr = dh_pub_key
+        if state.DHr:
+            state.RK, state.CKs = KDF_RK(SK, DH(state.DHs, state.DHr))
+
+        state.logging.debug("%s: Ratchet init DONE. %s", state.name, state.RK)
+        return state
+
 def GENERATE_DH():
     return dh.C_ECDH()
 
@@ -29,13 +96,12 @@ def ENCRYPT(mk, plaintext, associated_data) -> bytes:
     key, auth_key, iv = _encrypt_params(mk)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     cipher_text = iv + cipher.encrypt(pad(plaintext,  AES.block_size))
-
     hmac = _build_hash_out(auth_key, associated_data, cipher_text)
-    return cipher_text, cipher_text + hmac.digest()
+    return cipher_text + hmac.digest()
 
-def DECRYPT(mk, cipher_text, associated_data, MAC):
+def DECRYPT(mk, cipher_text, associated_data):
     try:
-        _verify_cipher_text(mk, cipher_text, MAC, associated_data)
+        cipher_text = _verify_cipher_text(mk, cipher_text, associated_data)
     except Exception as error:
         raise error
     else:
@@ -44,6 +110,11 @@ def DECRYPT(mk, cipher_text, associated_data, MAC):
         data = cipher_text[AES.block_size:]
         cipher = AES.new(key, AES.MODE_CBC, iv)
         return unpad(cipher.decrypt(data), AES.block_size)
+
+def CONCAT(ad, header):
+    import json
+    return ad.encode() + json.dumps(
+            [str(header.DH.get_public_key()), header.PN, header.N]).encode()
 
 def _build_hash_out(auth_key, associated_data, cipher_text):
     return HMAC.new(auth_key, digestmod=SHA256).update(
@@ -57,7 +128,7 @@ def _encrypt_params(mk):
 
     key = hkdf_out[:32]
     auth_key = hkdf_out[32:64]
-    iv = hkdf_out[64:hash_len]
+    iv = hkdf_out[64:(64+16)]
 
     return key, auth_key, iv
 
@@ -68,13 +139,19 @@ def _hkdf(master_secret, salt=None, length=32, num_keys=2, information=None):
     
     return HKDF(master_secret, length, salt, SHA512, num_keys, context=information)
 
-def _verify_cipher_text(mk, cipher_text, MAC, associated_data):
+def _verify_cipher_text(mk, cipher_text_mac, associated_data):
     """
     Throws ValueError – if the MAC does not match. 
     It means that the message has been tampered with or that 
         the MAC key is incorrect.
     """ 
     _, auth_key, _ = _encrypt_params(mk)
-    hmac = _build_hash_out(auth_key, associated_data, cipher_text)
-    mac = MAC[len(cipher_text):]
+
+    cipher_txt_len = associated_data["LEN"]
+    AD = associated_data["AD"]
+
+    cipher_text = cipher_text_mac[:cipher_txt_len]
+    mac = cipher_text_mac[cipher_txt_len:]
+    hmac = _build_hash_out(auth_key, AD, cipher_text)
     hmac.verify(mac)
+    return cipher_text

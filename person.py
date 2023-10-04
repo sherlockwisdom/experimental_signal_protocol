@@ -6,38 +6,49 @@ import logging
 class Person:
     def __init__(self, name, log_level='DEBUG'):
         self.name = name
-        self.state = self.State(self.name)
         self.logging = logging
         self.logging.basicConfig(level=log_level)
-        self.state.logging = self.logging
 
-    def init(self, SK=None, dh_pub_key=None):
-        if not SK:
-            self.state.ratchet_init_third(dh_pub_key)
-        elif not dh_pub_key:
-            self.state.ratchet_init(SK)
-        else:
-            self.state.ratchet_init_second(SK, dh_pub_key)
-        self.state.report_status()
+        self.dh = libsig.GENERATE_DH()
+
+
+    def get_public_key(self):
+        return self.dh.get_public_key()
+
+    def get_dh_public_key(self):
         return self.state.DHs.get_public_key()
+
+    def ini_with_public_key(self, peer_pub_key):
+        self.dh.set_peer_public_key(peer_pub_key)
+
+    def get_sk(self):
+        self.dh.generate_secret()
+        return self.dh.b_secrets
+
+    def rt_init(self, SK, dh_pub_key):
+        self.state = libsig.State(self.name)
+        self.state.logging = self.logging
+        self.state = libsig.DHRatchet.init(self.state, SK, dh_pub_key)
+        self.state.report_status()
 
     def send_message(self, plaintext, AD):
         self.state.CKs, mk = libsig.KDF_CK(self.state.CKs)
+        header = libsig.HEADER(self.state.DHs, self.state.PN, self.state.Ns)
         self.state.Ns += 1
-        '''TODO
-        return libsig.ENCRYPT(mk, plaintext, libsig.CONCAT(AD, header))
-        '''
         self.state.report_status()
-        return libsig.ENCRYPT(mk, plaintext.encode(), AD.encode())
+        return header, libsig.ENCRYPT(mk, plaintext.encode(), 
+                                      libsig.CONCAT(AD, header))
 
-    def read_message(self, cipher_text, MAC, AD):
+    def read_message(self, header, cipher_text, AD):
+        if header.DH != self.state.DHr:
+            self.state = libsig.DHRatchet(self.state, header)
         self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
         self.state.Nr += 1
         try:
             '''TODO
             return libsig.DECRYPT(mk, cipher_text, CONCAT(AD, header))
             '''
-            plaintext = libsig.DECRYPT(mk, cipher_text, AD.encode(), MAC)
+            plaintext = libsig.DECRYPT(mk, cipher_text, AD)
             self.state.report_status()
             return plaintext
         except ValueError as error:
@@ -47,48 +58,3 @@ class Person:
         except Exception as error:
             raise error
 
-    class State:
-        DHs = None
-        DHr = None
-
-        RK = None
-        CKs = None
-        CKr = None
-
-        Ns = 0
-        Nr = 0
-
-        logging = None
-
-        def ratchet_init(self, SK):
-            self.RK = SK
-            self.logging.debug("%s: Initializing first ratchet (SK): %s", 
-                               self.name, self.RK)
-
-        def ratchet_init_second(self, SK, dh_pub_key):
-            self.DHr = dh_pub_key
-            self.RK, self.CKs = libsig.KDF_RK(SK, libsig.DH(self.DHs, self.DHr))
-            self.logging.debug("%s: Initializing second ratchet (SK): %s", 
-                               self.name, self.RK)
-
-        def ratchet_init_third(self, dh_pub_key):
-            self.DHr = dh_pub_key
-            self.RK, self.CKr = libsig.KDF_RK(self.RK, libsig.DH(self.DHs, self.DHr))
-            self.logging.debug("%s: Initializing third ratchet (RK): %s", 
-                               self.name, self.RK)
-            self.DHs = libsig.GENERATE_DH()
-            self.ratchet_init_second(self.RK, self.DHr)
-
-        def report_status(self):
-            self.logging.debug("%s: State parameters -", self.name)
-            self.logging.debug("\t+ DHs: %s", self.DHs.get_public_key(False))
-            self.logging.debug("\t+ DHr: %s", self.DHr)
-            self.logging.debug("\t+ Ns: %d", self.Ns)
-            self.logging.debug("\t+ Nr: %d", self.Nr)
-            self.logging.debug("\t+ RK: %s", self.RK)
-            self.logging.debug("\t+ CKs: %s", self.CKs)
-            self.logging.debug("\t+ Ckr: %s", self.CKr)
-
-        def __init__(self, name):
-            self.name = name
-            self.DHs = libsig.GENERATE_DH()
