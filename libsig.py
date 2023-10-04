@@ -54,14 +54,19 @@ class HEADER:
 
 class DHRatchet:
     def __init__(self, state: State, header: HEADER):
-        state.PN = state.Ns
-        state.Ns = 0
-        state.Nr = 0
-        state.DHr = header.DH
-        state.RK, State.CKr = KDF_RK(state.RK, DH(state.DHs, state.DHr))
-        state.DHs = GENERATE_DH()
-        state.RK, state.CKs = KDF_RK(state.RK, DH(state.DHs, state.DHr))
-        return state
+        self.state = state
+        self.state.PN = state.Ns
+        self.state.Ns = 0
+        self.state.Nr = 0
+        self.state.DHr = header.DH.get_public_key()
+        self.state.RK, State.CKr = KDF_RK(
+                self.state.RK, DH(self.state.DHs, self.state.DHr))
+        self.state.DHs = GENERATE_DH()
+        self.state.RK, self.state.CKs = KDF_RK(
+                self.state.RK, DH(self.state.DHs, self.state.DHr))
+
+    def get_state(self):
+        return self.state
 
     def init(state, SK, dh_pub_key):
         state.DHs = GENERATE_DH()
@@ -145,13 +150,10 @@ def _verify_cipher_text(mk, cipher_text_mac, associated_data):
     It means that the message has been tampered with or that 
         the MAC key is incorrect.
     """ 
+
     _, auth_key, _ = _encrypt_params(mk)
-
-    cipher_txt_len = associated_data["LEN"]
-    AD = associated_data["AD"]
-
-    cipher_text = cipher_text_mac[:cipher_txt_len]
-    mac = cipher_text_mac[cipher_txt_len:]
-    hmac = _build_hash_out(auth_key, AD, cipher_text)
+    mac = cipher_text_mac[len(cipher_text_mac) - SHA256.digest_size:]
+    cipher_text = cipher_text_mac[:SHA256.digest_size]
+    hmac = _build_hash_out(auth_key, associated_data, cipher_text)
     hmac.verify(mac)
     return cipher_text

@@ -41,14 +41,13 @@ class Person:
 
     def read_message(self, header, cipher_text, AD):
         if header.DH != self.state.DHr:
-            self.state = libsig.DHRatchet(self.state, header)
+            dh_ratchet = libsig.DHRatchet(self.state, header)
+            self.state = dh_ratchet.get_state()
         self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
         self.state.Nr += 1
         try:
-            '''TODO
-            return libsig.DECRYPT(mk, cipher_text, CONCAT(AD, header))
-            '''
-            plaintext = libsig.DECRYPT(mk, cipher_text, AD)
+            plaintext = libsig.DECRYPT(mk, cipher_text, libsig.CONCAT(AD, header))
+            # plaintext = libsig.DECRYPT(mk, cipher_text, AD)
             self.state.report_status()
             return plaintext
         except ValueError as error:
