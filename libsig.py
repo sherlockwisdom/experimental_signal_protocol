@@ -6,6 +6,8 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
+import logging
+
 class State:
     DHs:dh.C_ECDH = None # -> keypair
     DHr:str = None # -> public key
@@ -22,7 +24,7 @@ class State:
     logging = None
 
     def report_status(self):
-        self.logging.debug("%s: State parameters -", self.name)
+        self.logging.debug("\n%s: State parameters -", self.name)
         self.logging.debug("\t+ DHs: %s", self.DHs.get_public_key(False))
         self.logging.debug("\t+ DHr: %s", self.DHr)
         self.logging.debug("\t+ PN: %s", self.PN)
@@ -155,5 +157,11 @@ def _verify_cipher_text(mk, cipher_text_mac, associated_data):
     mac = cipher_text_mac[len(cipher_text_mac) - SHA256.digest_size:]
     cipher_text = cipher_text_mac[:SHA256.digest_size]
     hmac = _build_hash_out(auth_key, associated_data, cipher_text)
-    hmac.verify(mac)
+    try:
+        hmac.verify(mac)
+    except Exception as error:
+        logging.debug("%s, %s, %s, %s", mac, cipher_text, associated_data, 
+                      hmac.digest())
+        raise error
+
     return cipher_text

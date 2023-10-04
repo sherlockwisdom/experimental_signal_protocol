@@ -40,9 +40,10 @@ class Person:
                                       libsig.CONCAT(AD, header))
 
     def read_message(self, header, cipher_text, AD):
-        if header.DH != self.state.DHr:
+        if header.DH.get_public_key() != self.state.DHr:
             dh_ratchet = libsig.DHRatchet(self.state, header)
             self.state = dh_ratchet.get_state()
+            logging.info("\n%s: Header ratchet happened!", self.name)
         self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
         self.state.Nr += 1
         try:

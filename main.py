@@ -28,13 +28,44 @@ def ratchet_init(SK, person1, person2):
     return person1, person2
 
 def send_message(message, AD, person1, person2):
-    header, cipher_txt_person1 = person1.send_message(message, ad)
+    """Observations:
+    - PN keeps increasing, though it should be Ns -> Why?
+    """
+    # Full Cycle
+    header, cipher_txt_person1 = person1.send_message(message, AD)
+    # logging.info("%d:%s: says encrypted: %s", 1, person1.name, cipher_txt_person1)
 
-    # header = HEADER.compose(header)
     plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
     assert(plaintext_person1.decode("utf-8") == message)
+    logging.info("%d:%s: says decrypted: %s", 2, person2.name, plaintext_person1)
 
-if __name__ == "__main__":
+    
+    # Full Cycle
+    header, cipher_txt_person1 = person1.send_message(message, AD)
+    # logging.info("%d:%s: says encrypted: %s", 5, person1.name, cipher_txt_person1)
+
+    plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
+    assert(plaintext_person1.decode("utf-8") == message)
+    logging.info("%d:%s: says decrypted: %s", 6, person2.name, plaintext_person1)
+
+
+    # Full Cycle
+    header1, cipher_txt_person2 = person2.send_message(message, AD)
+    # logging.info("%d:%s: says encrypted: %s", 3, person2.name, cipher_txt_person2)
+
+    plaintext_person2 = person1.read_message(header1, cipher_txt_person2, AD)
+    assert(plaintext_person2.decode("utf-8") == message)
+    logging.info("%d:%s: says decrypted: %s", 4, person1.name, plaintext_person2)
+
+    # Full Cycle
+    header, cipher_txt_person1 = person1.send_message(message, AD)
+    # logging.info("%d:%s: says encrypted: %s", 5, person1.name, cipher_txt_person1)
+
+    plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
+    assert(plaintext_person1.decode("utf-8") == message)
+    logging.info("%d:%s: says decrypted: %s", 6, person2.name, plaintext_person1)
+
+def main():
     log_level = 'DEBUG'
     if len(sys.argv) > 1:
         log_level = sys.argv[1]
@@ -60,31 +91,6 @@ if __name__ == "__main__":
     ad = "SEND_MSG_ALICE"
     send_message(message, ad, Alice, Bob)
 
-    """
-    # Alice messaging
-    alice_msg = "hello world"
-    alice_cipher_text, MAC = Alice.send_message(alice_msg, AD)
-    logging.info("%s: Sending encrypted message: %s", 
-                 Alice.name, alice_cipher_text)
-    logging.info("%s: Sending encrypted message (MAC): %s", 
-                 Alice.name, MAC)
-    alice_plaintext = Bob.read_message(alice_cipher_text, MAC, AD)
-    logging.info("%s: Reading decrypted message: %s\n", Bob.name, alice_plaintext)
-    assert(alice_plaintext.decode("utf-8") == alice_msg)
 
-    alice_pub_key = Alice.init(None, bob_pub_key)
-
-
-    # Bob messaging
-    AD = "SEND_MSG_BOB"
-    bob_msg = "Hello friend! Hello friend? That's lame"
-    bob_cipher_text, MAC = Bob.send_message(bob_msg, AD)
-    logging.info("%s: Sending encrypted message: %s", 
-                 Bob.name, alice_cipher_text)
-    logging.info("%s: Sending encrypted message (MAC): %s", 
-                 Bob.name, MAC)
-
-    bob_plaintext = Alice.read_message(bob_cipher_text, MAC, AD)
-    logging.info("%s: Reading decrypted message: %s\n", Alice.name, bob_plaintext)
-    assert(bob_plaintext.decode("utf-8") == bob_msg)
-    """
+if __name__ == "__main__":
+    main()
