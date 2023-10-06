@@ -61,7 +61,7 @@ class DHRatchet:
         self.state.Ns = 0
         self.state.Nr = 0
         self.state.DHr = header.DH.get_public_key()
-        self.state.RK, State.CKr = KDF_RK(
+        self.state.RK, self.state.CKr = KDF_RK(
                 self.state.RK, DH(self.state.DHs, self.state.DHr))
         self.state.DHs = GENERATE_DH()
         self.state.RK, self.state.CKs = KDF_RK(
