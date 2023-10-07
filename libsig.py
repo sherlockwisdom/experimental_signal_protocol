@@ -21,6 +21,8 @@ class State:
 
     PN = 0
 
+    MKSKIPPED = {}
+
     logging = None
 
     def report_status(self):
@@ -33,6 +35,7 @@ class State:
         self.logging.debug("\t+ RK: %s", self.RK)
         self.logging.debug("\t+ CKs: %s", self.CKs)
         self.logging.debug("\t+ Ckr: %s", self.CKr)
+        self.logging.debug("\t+ MKSKIPPED: %s", self.MKSKIPPED)
 
     def __init__(self, name):
         self.name = name
@@ -160,8 +163,8 @@ def _verify_cipher_text(mk, cipher_text_mac, associated_data):
     try:
         hmac.verify(mac)
     except Exception as error:
-        logging.debug("%s, %s, %s, %s", mac, cipher_text, associated_data, 
-                      hmac.digest())
+        logging.error("\nmac: %s\ncipher text: %s\nAD: %s\nHMAC digest: %s", 
+                      mac, cipher_text, associated_data, hmac.digest())
         raise error
 
     return cipher_text

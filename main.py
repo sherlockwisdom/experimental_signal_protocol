@@ -27,43 +27,67 @@ def ratchet_init(SK, person1, person2):
 
     return person1, person2
 
-def send_message(message, AD, person1, person2):
+def send_message(message, person1, person2):
     """Observations:
     - PN keeps increasing, though it should be Ns -> Why?
     """
-    # Full Cycle
-    header, cipher_txt_person1 = person1.send_message(message, AD)
-    # logging.info("%d:%s: says encrypted: %s", 1, person1.name, cipher_txt_person1)
+    def person1_message():
+        # Full Cycle
+        AD = "SEND_MSG_ALICE"
+        header, cipher_txt_person1 = person1.send_message(message, AD)
+        plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
+        assert(plaintext_person1.decode("utf-8") == message)
+        logging.info("%d:%s: says decrypted: %s", 2, person2.name, plaintext_person1)
+        return person1, person2
 
-    plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
-    assert(plaintext_person1.decode("utf-8") == message)
-    logging.info("%d:%s: says decrypted: %s", 2, person2.name, plaintext_person1)
+    def person2_message():
+        # Full Cycle
+        AD = "SEND_MSG_BOB"
+        header, cipher_txt_person2 = person2.send_message(message, AD)
+        plaintext_person2 = person1.read_message(header, cipher_txt_person2, AD)
+        assert(plaintext_person2.decode("utf-8") == message)
+        logging.info("%d:%s: says decrypted: %s", 2, person2.name, plaintext_person2)
+        return person1, person2
 
-    
-    # Full Cycle
-    header, cipher_txt_person1 = person1.send_message(message, AD)
-    # logging.info("%d:%s: says encrypted: %s", 5, person1.name, cipher_txt_person1)
+    def person1_message_nr():
+        # Full Cycle
+        AD = "SEND_MSG_ALICE"
+        header, cipher_txt_person1 = person1.send_message(message, AD)
+        print(header.DH.get_public_key(), header.N)
+        header1, cipher_txt_person1_1 = person1.send_message(message, AD)
 
-    plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
-    assert(plaintext_person1.decode("utf-8") == message)
-    logging.info("%d:%s: says decrypted: %s", 6, person2.name, plaintext_person1)
+        plaintext_person1_1 = person2.read_message(header1, cipher_txt_person1_1, AD)
+        assert(plaintext_person1_1.decode("utf-8") == message)
+        logging.info("%d:%s: says decrypted_nr: %s", 2, person2.name, 
+                     plaintext_person1_1)
+
+        plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
+        assert(plaintext_person1.decode("utf-8") == message)
+        logging.info("%d:%s: says decrypted_nr: %s", 2, person2.name, 
+                     plaintext_person1)
+
+        return person1, person2
+
+    # Because Alice has to message first
+    # TODO: implement such that Bob can message first
+    person1, person2 = person1_message()
+
+    logging.info("\n<=======INIT DONE==============>\n")
+
+    person1_message_nr()
+
+    # burst_send()
 
 
-    # Full Cycle
-    header1, cipher_txt_person2 = person2.send_message(message, AD)
-    # logging.info("%d:%s: says encrypted: %s", 3, person2.name, cipher_txt_person2)
+def burst_send(num = 10):
+    fn_persons = [person1_message, person2_message]
 
-    plaintext_person2 = person1.read_message(header1, cipher_txt_person2, AD)
-    assert(plaintext_person2.decode("utf-8") == message)
-    logging.info("%d:%s: says decrypted: %s", 4, person1.name, plaintext_person2)
-
-    # Full Cycle
-    header, cipher_txt_person1 = person1.send_message(message, AD)
-    # logging.info("%d:%s: says encrypted: %s", 5, person1.name, cipher_txt_person1)
-
-    plaintext_person1 = person2.read_message(header, cipher_txt_person1, AD)
-    assert(plaintext_person1.decode("utf-8") == message)
-    logging.info("%d:%s: says decrypted: %s", 6, person2.name, plaintext_person1)
+    import random
+    for i in range(num):
+        """
+        """
+        r_int = random.randint(0, 1)
+        person1, person2 = fn_persons[r_int]()
 
 def main():
     log_level = 'DEBUG'
@@ -88,8 +112,7 @@ def main():
 
     # step 3: Alice should now send a message
     message = "Hello world"
-    ad = "SEND_MSG_ALICE"
-    send_message(message, ad, Alice, Bob)
+    send_message(message, Alice, Bob)
 
 
 if __name__ == "__main__":

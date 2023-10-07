@@ -36,19 +36,41 @@ class Person:
         header = libsig.HEADER(self.state.DHs, self.state.PN, self.state.Ns)
         self.state.Ns += 1
         self.state.report_status()
+        logging.debug("%s: MK - %s", self.name, mk)
         return header, libsig.ENCRYPT(mk, plaintext.encode(), 
                                       libsig.CONCAT(AD, header))
 
-    def read_message(self, header, cipher_text, AD):
+    def try_skip_message_keys(self, header, ciphertext, AD):
+        if (header.DH.get_public_key(), header.N) in self.state.MKSKIPPED:
+            mk = self.state.MKSKIPPED[header.DH.get_public_key(), header.N]
+            del self.state.MKSKIPPED[header.DH.get_public_key(), header.N]
+            return libsig.DECRYPT(mk, ciphertext, libsig.CONCAT(AD, header))
+
+    def skip_message_keys(self, until):
+        if self.state.CKr:
+            while self.state.Nr < until:
+                self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
+                self.state.MKSKIPPED[self.state.DHr, self.state.Nr] = mk
+                self.state.Nr += 1
+
+    def read_message(self, header, ciphertext, AD):
+        plaintext = self.try_skip_message_keys(header, ciphertext, AD)
+        if plaintext:
+            self.state.report_status()
+            return plaintext
+
         if header.DH.get_public_key() != self.state.DHr:
+            self.skip_message_keys(header.PN)
             dh_ratchet = libsig.DHRatchet(self.state, header)
             self.state = dh_ratchet.get_state()
             logging.info("\n%s: Header ratchet happened!", self.name)
+
+        self.skip_message_keys(header.N)
         self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)
         self.state.Nr += 1
+
         try:
-            plaintext = libsig.DECRYPT(mk, cipher_text, libsig.CONCAT(AD, header))
-            # plaintext = libsig.DECRYPT(mk, cipher_text, AD)
+            plaintext = libsig.DECRYPT(mk, ciphertext, libsig.CONCAT(AD, header))
             self.state.report_status()
             return plaintext
         except ValueError as error:
