@@ -75,19 +75,15 @@ def send_message(message, person1, person2):
     logging.info("\n<=======INIT DONE==============>\n")
 
     person1_message_nr()
-
-    # burst_send()
-
-
-def burst_send(num = 10):
     fn_persons = [person1_message, person2_message]
 
     import random
-    for i in range(num):
+    for i in range(10):
         """
         """
         r_int = random.randint(0, 1)
         person1, person2 = fn_persons[r_int]()
+
 
 def main():
     log_level = 'DEBUG'
