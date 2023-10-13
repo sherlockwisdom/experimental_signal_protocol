@@ -36,7 +36,6 @@ class Person:
         header = libsig.HEADER(self.state.DHs, self.state.PN, self.state.Ns)
         self.state.Ns += 1
         self.state.report_status()
-        logging.debug("%s: MK - %s", self.name, mk)
         return header, libsig.ENCRYPT(mk, plaintext.encode(), 
                                       libsig.CONCAT(AD, header))
 
@@ -63,7 +62,6 @@ class Person:
             self.skip_message_keys(header.PN)
             dh_ratchet = libsig.DHRatchet(self.state, header)
             self.state = dh_ratchet.get_state()
-            logging.info("\n%s: Header ratchet happened!", self.name)
 
         self.skip_message_keys(header.N)
         self.state.CKr, mk = libsig.KDF_CK(self.state.CKr)

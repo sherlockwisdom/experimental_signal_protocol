@@ -79,8 +79,6 @@ class DHRatchet:
         state.DHr = dh_pub_key
         if state.DHr:
             state.RK, state.CKs = KDF_RK(SK, DH(state.DHs, state.DHr))
-
-        state.logging.debug("%s: Ratchet init DONE. %s", state.name, state.RK)
         return state
 
 def GENERATE_DH():
