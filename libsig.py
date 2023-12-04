@@ -96,8 +96,10 @@ def KDF_RK(rk, dh_out): #dh_out = pub_key
 
 def KDF_CK(ck):
     d_ck = HMAC.new(ck, digestmod=SHA256)
-    ck = d_ck.update(bytes(0x01)).digest()
-    mk = d_ck.update(bytes(0x02)).digest()
+    ck = d_ck.update(b'\x01').digest()
+
+    d_ck = HMAC.new(ck, digestmod=SHA256)
+    mk = d_ck.update(b'\x02').digest()
     return ck, mk
 
 def ENCRYPT(mk, plaintext, associated_data) -> bytes:
